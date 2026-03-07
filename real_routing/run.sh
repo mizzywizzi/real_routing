@@ -4,7 +4,7 @@
 cd "$(dirname "$0")"
 
 echo "Compiling storm2.c..."
-gcc storm2.c -o storm2.out -lSDL2 -lSDL2_ttf -lm
+gcc storm2.c -o storm.out -lSDL2 -lSDL2_ttf -lm
 
 if [ $? -ne 0 ]; then
     echo "Compilation failed."
