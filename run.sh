@@ -4,7 +4,7 @@
 cd "$(dirname "$0")"
 
 echo "Compiling storm2.c..."
-gcc storm2.c -o storm.out -lSDL2 -lSDL2_ttf -lm
+gcc storm.c -o storm.out -lSDL2 -lSDL2_ttf -lm
 
 if [ $? -ne 0 ]; then
     echo "Compilation failed."
@@ -14,7 +14,7 @@ fi
 echo "Compilation successful."
 
 # Runs the app immediately
-RUNNER='./storm2.out'
+RUNNER='./storm.out'
 
 # Try terminal emulators in order of preference
 if command -v qterminal &>/dev/null; then
@@ -30,5 +30,5 @@ elif command -v konsole &>/dev/null; then
 else
     # No external terminal found — run inline (already in a terminal)
     echo "No terminal emulator found. Running inline:"
-    ./storm2.out
+    ./storm.out
 fi
