@@ -17,7 +17,7 @@ int winWidth = 1920;
 int winHeight = 1080;
 #define TOPBAR 0
 #define GRID_SCALE 4
-#define PADDING_COST 50.0f
+#define PADDING_COST 5.0f
 #define STORM_THRESHOLD 20.0f
 #define VELOCITY_SAMPLES 5
 
@@ -98,6 +98,7 @@ int zoomMouseX = 0, zoomMouseY = 0;   // Screen position of mouse during zoom
 int showStorms = 1;                   // Toggle storm graphics on/off
 int showWindParticles = 1;            // Toggle wind particles
 int showWaveHeights = 1;              // Toggle wave gradient
+int isFullscreen = 0;                 // Borderless fullscreen toggle
 float loadingRotation = 0.0f;         // For route analysis spinner
 float pathDrawProgress = 0.0f;        // 0.0 to 1.0 for write-on effect
 float spinnerTimer = 0.0f;            // Duration for loading spinner
@@ -129,6 +130,7 @@ int mapWidth, mapHeight;
 SDL_Texture *iconShip = NULL, *iconApi = NULL, *iconCloud = NULL, *iconKeyboard = NULL;
 SDL_Texture *iconGraphOn  = NULL, *iconGraphOff = NULL, *iconOnline   = NULL, *iconUnplug = NULL;
 SDL_Texture *iconSettings = NULL, *iconLoader = NULL, *iconArrow = NULL;
+SDL_Texture *iconFullscreen = NULL;
 int isOnline = 1; // Track API reachability
 
 // Default Generic Vessel Parameters
@@ -1197,13 +1199,26 @@ void createCollisionGrid(SDL_Surface *surf) {
   Uint32 *pixels = (Uint32 *)surf->pixels;
   for (int y = 0; y < gridH; y++) {
     for (int x = 0; x < gridW; x++) {
-      Uint32 pixel = pixels[(y * GRID_SCALE * surf->w) + (x * GRID_SCALE)];
-      Uint8 r, g, b;
-      SDL_GetRGB(pixel, surf->format, &r, &g, &b);
-      // Land is typically very dark grey/black (< 20).
-      // Everything else should be treated as Ocean (0) to include all ocean
-      // shades.
-      collisionGrid[y * gridW + x] = (r < 20 && g < 20 && b < 20) ? 1 : 0;
+      int isLand = 0;
+      // Examine every pixel within the GRID_SCALE x GRID_SCALE block
+      for (int py = 0; py < GRID_SCALE; py++) {
+        for (int px = 0; px < GRID_SCALE; px++) {
+          int py_total = y * GRID_SCALE + py;
+          int px_total = x * GRID_SCALE + px;
+          if (py_total < surf->h && px_total < surf->w) {
+            Uint32 pixel = pixels[py_total * surf->w + px_total];
+            Uint8 r, g, b;
+            SDL_GetRGB(pixel, surf->format, &r, &g, &b);
+            // Relaxed threshold: land is < 35 (includes more land shades)
+            if (r < 35 && g < 35 && b < 35) {
+              isLand = 1;
+              break;
+            }
+          }
+        }
+        if (isLand) break;
+      }
+      collisionGrid[y * gridW + x] = isLand ? 1 : 0;
     }
   }
 
@@ -1558,6 +1573,7 @@ int main(int argc, char *argv[]) {
   iconSettings = LoadTexture(ren, "assets/icons/settings.png");
   iconLoader   = LoadTexture(ren, "assets/icons/loader-circle.png");
   iconArrow    = LoadTexture(ren, "assets/icons/arrow.png");
+  iconFullscreen = LoadTexture(ren, "assets/icons/fullscreen.png");
 
   drawLoadingScreen(ren, font, "Loading map texture...", 3, 7);
   SDL_Surface *surf = LoadSurface("assets/temp1.png");
@@ -1588,6 +1604,7 @@ int main(int argc, char *argv[]) {
   Uint32 lastZoomSound = 0;
   SDL_Rect stormBtn = {10, 180, 300,
                        38}; // Storm toggle button (below marine panel)
+  SDL_Rect fullscreenBtn = {320, 10, 30, 30}; // Fullscreen toggle (right of marine panel)
 
   while (running) {
     Uint32 currentTicks = SDL_GetTicks();
@@ -1604,6 +1621,7 @@ int main(int argc, char *argv[]) {
           e.window.event == SDL_WINDOWEVENT_RESIZED) {
         winWidth = e.window.data1;
         winHeight = e.window.data2;
+        // fullscreenBtn stays at fixed position next to marine panel
       }
       if (e.type == SDL_TEXTINPUT) {
          char *targetBuf = NULL;
@@ -1935,6 +1953,12 @@ int main(int argc, char *argv[]) {
             else if (bx >= stormBtn.x && bx <= stormBtn.x + stormBtn.w &&
                 by >= stormBtn.y && by <= stormBtn.y + stormBtn.h) {
               showStorms = !showStorms;
+            }
+            // Check fullscreen toggle button (top-right)
+            else if (bx >= fullscreenBtn.x && bx <= fullscreenBtn.x + fullscreenBtn.w &&
+                     by >= fullscreenBtn.y && by <= fullscreenBtn.y + fullscreenBtn.h) {
+                isFullscreen = !isFullscreen;
+                SDL_SetWindowFullscreen(win, isFullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
             } else {
               // It was just a click on the map! Set Waypoint A/B
               float wx = screenToWorldX(e.button.x),
@@ -2488,6 +2512,18 @@ int main(int argc, char *argv[]) {
     SDL_RenderCopy(ren, btnTex, NULL, &btnTextRect);
     SDL_FreeSurface(btnSurf);
     SDL_DestroyTexture(btnTex);
+
+    // --- Fullscreen Toggle Button (Right of Marine Panel) ---
+    SDL_Color fsBg = isFullscreen ? (SDL_Color){10, 50, 70, 220} : (SDL_Color){20, 30, 40, 180};
+    SDL_Color fsBrd = isFullscreen ? (SDL_Color){0, 255, 255, 255} : (SDL_Color){100, 100, 100, 200};
+    drawRoundedRect(ren, fullscreenBtn, 6, fsBg, 0);
+    drawRoundedRectBorder(ren, fullscreenBtn, 6, fsBrd);
+    if (iconFullscreen) {
+        SDL_Rect fsIR = {fullscreenBtn.x + 5, fullscreenBtn.y + 5, 20, 20};
+        if (isFullscreen) SDL_SetTextureColorMod(iconFullscreen, 0, 255, 255);
+        else SDL_SetTextureColorMod(iconFullscreen, 255, 255, 255);
+        SDL_RenderCopy(ren, iconFullscreen, NULL, &fsIR);
+    }
 
     // --- Coordinate info text (shifted down to avoid button overlap) ---
     const char *labels[2] = {"A", "B"};
